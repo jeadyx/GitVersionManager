@@ -1,5 +1,3 @@
-import io.github.jeadyx.UploaderExtension
-
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.jetbrains.kotlin.android)
@@ -37,7 +35,7 @@ android {
 }
 
 group = "io.github.jeadyx.compose"
-version = "1.0"
+version = "1.2"
 val tokenUsername:String by project
 val tokenPassword:String by project
 sonatypeUploader{
@@ -67,10 +65,10 @@ sonatypeUploader{
         }
         withXml {
             val dependenciesNode = asNode().appendNode("dependencies")
-            val dependencyNode = dependenciesNode.appendNode("dependency")
-            dependencyNode.appendNode("groupId", "com.squareup.okhttp3")
-            dependencyNode.appendNode("artifactId", "okhttp")
-            dependencyNode.appendNode("version", "4.12.0")
+            val dependencyNetManager = dependenciesNode.appendNode("dependency")
+            dependencyNetManager.appendNode("groupId", "io.github.jeadyx.compose")
+            dependencyNetManager.appendNode("artifactId", "SimpleNetManager")
+            dependencyNetManager.appendNode("version", "1.2")
         }
     }
 }
@@ -80,7 +78,7 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
-    implementation("io.github.jeadyx.compose:simple-net-manager:1.0")
+    implementation(libs.simplenetmanager)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

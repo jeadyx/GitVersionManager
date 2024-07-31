@@ -1,7 +1,6 @@
 package io.github.jeadyx.gitversionmanager
 
 import android.content.Context
-import android.icu.lang.UCharacter.LineBreak.H3
 import android.os.Bundle
 import android.os.Environment
 import android.util.Log
@@ -9,14 +8,14 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -25,10 +24,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.tooling.preview.Preview
-import com.jeady.jxcompose.manager.software.GitManager
+import androidx.compose.ui.unit.dp
 import io.github.jeadyx.gitversionmanager.ui.theme.GitVersionManagerTheme
 import java.io.File
+import java.math.BigDecimal
+import java.math.RoundingMode
+import java.text.DecimalFormat
 import kotlin.concurrent.thread
 
 private val TAG = "MainActivity"
@@ -81,10 +82,9 @@ fun GitManagerExample(modifier: Modifier = Modifier){
                 gitManager.openAPK(context, state)
         })
     }
-    Column(modifier) {
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(20.dp)) {
         ButtonText("检查新版本") {
             gitManager.getLatestServerVersion("test/versions.json") {
-                Log.d(TAG, "GitManagerExample: get servrer version inofo $it")
                 it?.let { v ->
                     val currentVersion = context.packageManager.getPackageInfo(context.packageName,0).versionName
                     if (gitManager.isNewVersion(v.version, currentVersion)) {
@@ -116,6 +116,37 @@ fun GitManagerExample(modifier: Modifier = Modifier){
             thread {
                 gitManager.getVersions("test/versions.json") { res ->
                     showDialog1("$res")
+                }
+            }
+        }
+        Row {
+//            var path by remember { mutableStateOf("timetodo/version.json") }
+//            var path by remember { mutableStateOf("test/mm.jpg") }
+            var path by remember { mutableStateOf("test/test-1.0.apk") }
+            var current by remember { mutableStateOf(-1) }
+            var total by remember { mutableStateOf(-1) }
+            var progress by remember { mutableStateOf(-1) }
+            TextField(value = path, onValueChange = { path = it })
+            ButtonText(if(progress!=-1) "($progress%)下载指定文件 ${gitManager.formatSize(current.toLong())} / ${gitManager.formatSize(total.toLong())}" else "下载到下载目录") {
+                current = 0
+                total = 0
+                progress = 0
+                thread {
+                    gitManager.downloadFile(path, "${Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).path}/$path") { res ->
+                        total = res.total
+                        current = res.current
+                        progress = res.progress
+                        if(res.progress == 100) {
+                            val isApk = res.savePath.endsWith(".apk")
+                            showDialog1(DialogActions("$res", cancelText = if(isApk) "忽略" else "", confirmText = if(isApk) "安装" else "确定"){
+                                if(isApk){
+                                    gitManager.openAPK(context, res.savePath)
+                                }
+                            })
+                        }else if(res.errMsg!=null){
+                            showDialog1(res.errMsg!!)
+                        }
+                    }
                 }
             }
         }

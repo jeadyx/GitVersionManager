@@ -1,4 +1,4 @@
-package com.jeady.jxcompose.manager.software
+package io.github.jeadyx.gitversionmanager
 
 import android.content.Context
 import android.content.Intent
@@ -6,8 +6,11 @@ import android.util.Base64
 import android.util.Log
 import androidx.core.content.FileProvider
 import com.google.gson.Gson
+import io.github.jeadyx.simplenetmanager.SimpleNetManager
 import java.io.File
 import java.io.FileOutputStream
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.net.URL
 import java.net.URLEncoder
 
@@ -18,10 +21,10 @@ private val TAG = "[GitManager]"
  */
 class GitManager(private val repoOwner: String, private val repoName: String, private val accessToken: String) {
 //    private val server = ServerManager.getInstance("https://api.gitcode.com", 30L)
-    private var server = ServerManager.getInstance("https://gitee.com", 120L)
+    private var server = SimpleNetManager.getInstance("https://gitee.com", 120L)
     fun setHost(url: String): Boolean{
         if(!url.startsWith("http") && !url.startsWith("https")) return false
-        server =  ServerManager.getInstance(url)
+        server =  SimpleNetManager.getInstance(url)
         return true
     }
     fun isNewVersion(newVersion: String, oldVersion: String): Boolean{
@@ -95,19 +98,23 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
         server.get("api/v5/repos/${repoOwner}/${repoName}/contents/$encodedPath",
                 "access_token=${accessToken}", ResponseInfo::class.java
             ) { data, errMsg->
-                Log.i(TAG, "downloadFile: get contents res: ${data?.content?.length} / ${data?.size} ${data?.sha}; \nerr:$errMsg")
+//                Log.i(TAG, "downloadFile: get contents res: ${data?.message} ${data?.content?.length} / ${data?.size} ${data?.sha}; \nerr:$errMsg")
+//                Log.d(TAG, "downloadFile: ${data?.content?.length} ${data?.content}")
                 data?.let { contentInfo ->
-                    downloadCallback(DownloadStatus(total = contentInfo.size.toInt()))
                     if (contentInfo.content.isNotBlank() && contentInfo.content.length == contentInfo.size.toInt()){
+                        downloadCallback(DownloadStatus(total = contentInfo.size.toInt(), current = 0, progress = 0))
                         saveByteArrayToFile(
                             fileSavePath,
                             Base64.decode(contentInfo.content, Base64.DEFAULT),
                             downloadCallback
                         )
+                        downloadCallback(DownloadStatus(total = contentInfo.size.toInt(), current = contentInfo.size.toInt(), progress = 100))
                     } else {
                         downloadBlobs(contentInfo.sha, fileSavePath, downloadCallback)
                     }
-                }?: downloadOnly(filePath, "$fileSavePath.json", downloadCallback)
+                }?: run{
+                    downloadCallback(DownloadStatus(errMsg=if(errMsg=="[]") "File $repoOwner/$repoName/$filePath not found!" else errMsg?:"UNKNOWN ERR", total = 0, current = 0, progress = 0))
+                }
             }
     }
     fun downloadOnly(apkPath: String, fileSavePath: String, downloadCallback: (DownloadStatus)->Unit){
@@ -121,6 +128,7 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
             }
         }
     }
+    @OptIn(ExperimentalStdlibApi::class)
     fun downloadBlobs(sha:String, fileSavePath: String, downloadCallback: (DownloadStatus)->Unit){
         server.get(
             "api/v5/repos/${repoOwner}/${repoName}/git/blobs/$sha",
@@ -130,13 +138,34 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
                 TAG,
                 "downloadBlobs: get blobs res: ${data?.content?.length} ; \nerr:$errMsg"
             )
+            val file = File(fileSavePath)
+            if(file.exists()) file.delete()
             data?.let { blobsInfo->
-                blobsInfo.content?.let {
-                    saveByteArrayToFile(
-                        fileSavePath,
-                        Base64.decode(it, Base64.DEFAULT),
-                        downloadCallback
-                    )
+                blobsInfo.content?.let {content->
+                    Log.d(TAG, "downloadFile2: ${content.length} ${content}")
+                    var currentIdx = 1
+                    val readOneLen = 1024 * 500
+                    var readLen = 0
+                    val bufferrr = Base64.decode(content, Base64.DEFAULT)
+                    while (content.length > readLen){
+                        var buffer = byteArrayOf()
+                        if(content.length>readLen+readOneLen){
+                            buffer = Base64.decode(content.substring(readLen, readLen+readOneLen), Base64.DEFAULT)
+                            readLen += readOneLen
+                            currentIdx++
+                        }else{
+                            buffer = Base64.decode(content.substring(readLen, content.length), Base64.DEFAULT)
+                            readLen += content.length-readLen
+                            currentIdx++
+                        }
+                        appendByteArrayToFile(
+                            fileSavePath,
+                            buffer,
+                            downloadCallback
+                        )
+                        downloadCallback(DownloadStatus(progress = (readLen.toFloat()/content.length*100).toInt(),
+                            current = readLen, total = content.length, savePath = fileSavePath))
+                    }
                 }?:run {
                     downloadCallback(DownloadStatus(errMsg = "下载失败: ${blobsInfo.error_msg}"))
                 }
@@ -156,7 +185,20 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
             val outputStream = FileOutputStream(file)
             outputStream.write(content)
             outputStream.close()
-            saveCallback(DownloadStatus(savePath = file.absolutePath, progress = 100))
+        }catch (e:Exception){
+            Log.e(TAG, "downloadAPK: $e")
+        }
+    }
+    private fun appendByteArrayToFile(fileSavePath: String, content: ByteArray, saveCallback: (DownloadStatus)->Unit){
+        if(content.isEmpty()) return
+        val file = File(fileSavePath)
+        if (!file.exists() && file.parent?.let { File(it).exists() } == false){
+            file.parent?.let { File(it).mkdirs() }
+        }
+        try {
+            val outputStream = FileOutputStream(file, true)
+            outputStream.write(content)
+            outputStream.close()
         }catch (e:Exception){
             Log.e(TAG, "downloadAPK: $e")
         }
@@ -226,6 +268,25 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
         }
     }
 
+    /**
+     * 格式化文件大小
+     * @param size 文件大小
+     * @param scale 保留小数位数，默认2位
+     * @param roundingMode 小数取舍模式，默认四舍五入
+     * @return 格式化后的文件大小表示
+     */
+    fun formatSize(size: Long, scale: Int=2, roundingMode: RoundingMode=RoundingMode.HALF_UP): String{
+        return if(size < 1024){
+            "${size}B"
+        }else if(size < 1024*1024){
+            BigDecimal(size.toDouble()/1024).setScale(2, roundingMode).toString() + "KB"
+        }else if(size < 1024*1024*1024){
+            BigDecimal(size.toDouble()/1024/1024).setScale(2, roundingMode).toString() + "MB"
+        }else{
+            BigDecimal(size.toDouble()/1024/1024/1024).setScale(2, roundingMode).toString() + "GB"
+        }
+    }
+
     data class ResponseInfo(
         val timestamp: String,
         val status: Int,
@@ -242,7 +303,8 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
         val _links: ContentsInfoLinks,
         val error_msg: String,
         val error_code: String,
-        val request_id: String
+        val request_id: String,
+        val message: String
     )
     data class ContentsInfoLinks(val self: String, val html: String)
 
@@ -277,7 +339,7 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
     )
     data class DownloadStatus(
         val msg: String = "",
-        val errMsg: String = "",
+        val errMsg: String? = null,
         val savePath: String = "",
         val progress: Int=0,
         val total: Int=0,
