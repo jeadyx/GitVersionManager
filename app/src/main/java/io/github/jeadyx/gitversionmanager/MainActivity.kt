@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -67,7 +68,7 @@ fun GitManagerExample(modifier: Modifier = Modifier){
     var apkPath by remember {
         mutableStateOf("$downloadDir/release.apk")
     }
-    val gitManager = remember {
+    var gitManager = remember {
 //            GitManager("jeadyu", "healthcare-publisher", "QnPoZQzjJDER4Kv6wKx8VLVQ") // gitcode
 //            GitManager("jeadyu", "healthcare-publisher", "af19696ba3697a0d2831598268441d79") // gitee
         GitManager("jeady5", "publisher", "e8d83e715fa7b44d2d89b3cf7d7554e0")
@@ -83,6 +84,15 @@ fun GitManagerExample(modifier: Modifier = Modifier){
         })
     }
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        var ownerName by remember { mutableStateOf("") }
+        var repoName by remember { mutableStateOf("") }
+        var accessToken by remember { mutableStateOf("") }
+        TextField(value = ownerName, onValueChange = { ownerName = it }, placeholder = { Text("ownerName") })
+        TextField(value = repoName, onValueChange = { repoName = it }, placeholder = { Text("repoName") })
+        TextField(value = accessToken, onValueChange = { accessToken = it }, placeholder = { Text("accessToken") })
+        ButtonText("初始化") {
+            gitManager = GitManager(ownerName, repoName, accessToken)
+        }
         ButtonText("检查新版本") {
             gitManager.getLatestServerVersion("test/versions.json") {
                 it?.let { v ->

@@ -17,16 +17,31 @@ import java.net.URLEncoder
 private val TAG = "[GitManager]"
 
 /**
- * 无需自建服务器，使用git管理你的应用版本
+ * 无需自建服务器，使用git管理你的应用版本; 默认为gitee仓库;
+ * * 如需自定义服务器地址，请使用 [setHost]
+ * * 关于版本文件的编写参考 [jsonFileSample]
+ * @see setHost 设置自定义服务器地址
+ * @see jsonFileSample 版本文件示例
  */
 class GitManager(private val repoOwner: String, private val repoName: String, private val accessToken: String) {
 //    private val server = ServerManager.getInstance("https://api.gitcode.com", 30L)
     private var server = SimpleNetManager.getInstance("https://gitee.com", 120L)
+
+    /**
+     * 设置服务器地址. 如https://gitee.com
+     */
     fun setHost(url: String): Boolean{
         if(!url.startsWith("http") && !url.startsWith("https")) return false
         server =  SimpleNetManager.getInstance(url)
         return true
     }
+
+    /**
+     * 判断指定版本号是否为新版本，如v1.0.1 > v1.0.0
+     * @param newVersion 新版本号
+     * @param oldVersion 旧版本号
+     * @return true: 新版本; false: 不是新版本
+     */
     fun isNewVersion(newVersion: String, oldVersion: String): Boolean{
         val newVersionInfo = newVersion.trim().trim('v', 'V', '.').split('.')
         val oldVersionInfo = oldVersion.trim().trim('v', 'V', '.').split('.')
@@ -40,6 +55,12 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
         }
         return false
     }
+
+    /**
+     * 从服务器获取最新版本信息
+     * @param filePath git版本文件的路径
+     * @param latestVersionCallback 回调函数
+     */
     fun getLatestServerVersion(filePath: String, latestVersionCallback: (VersionInfo?)->Unit){
          server.get("api/v5/repos/${repoOwner}/${repoName}/contents/" + URLEncoder.encode(filePath, "utf-8"),
                 "access_token=${accessToken}", ResponseInfo::class.java
@@ -60,6 +81,11 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
             }
     }
 
+    /**
+     * 从服务器获取测试版本信息
+     * @param filePath git版本文件的路径
+     * @param latestVersionCallback 回调函数
+     */
     fun getTestServerVersion(filePath: String, latestVersionCallback: (VersionInfo?)->Unit){
         server.get("api/v5/repos/${repoOwner}/${repoName}/contents/" + URLEncoder.encode(filePath, "utf-8"),
             "access_token=${accessToken}", ResponseInfo::class.java
@@ -76,6 +102,13 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
             }
         }
     }
+
+    /**
+     * 从服务器获取全部版本信息
+     * @param filePath git版本文件的路径
+     * @param appVersions 回调函数
+     * @see AppVersionsInfo
+     */
     fun getVersions(filePath: String, appVersions: (AppVersionsInfo)->Unit){
         server.get("api/v5/repos/${repoOwner}/${repoName}/contents/" + URLEncoder.encode(filePath, "utf-8"),
             "access_token=${accessToken}", ResponseInfo::class.java
@@ -89,6 +122,13 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
             }
         }
     }
+
+    /**
+     * 从服务器下载指定文件
+     * @param filePath git文件路径
+     * @param fileSavePath 文件本地保存路径
+     * @param downloadCallback 下载回调
+     */
     fun downloadFile(filePath: String, fileSavePath: String, downloadCallback: (DownloadStatus)->Unit){
         if(filePath.startsWith("http") || filePath.startsWith("https")){
             downloadFileByUrl(filePath, fileSavePath, downloadCallback)
@@ -105,8 +145,7 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
                         downloadCallback(DownloadStatus(total = contentInfo.size.toInt(), current = 0, progress = 0))
                         saveByteArrayToFile(
                             fileSavePath,
-                            Base64.decode(contentInfo.content, Base64.DEFAULT),
-                            downloadCallback
+                            Base64.decode(contentInfo.content, Base64.DEFAULT)
                         )
                         downloadCallback(DownloadStatus(total = contentInfo.size.toInt(), current = contentInfo.size.toInt(), progress = 100))
                     } else {
@@ -117,6 +156,10 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
                 }
             }
     }
+
+    /**
+     * 下载文件
+     */
     fun downloadOnly(apkPath: String, fileSavePath: String, downloadCallback: (DownloadStatus)->Unit){
         val encodedPath = URLEncoder.encode(apkPath, "utf-8")
         server.get(
@@ -124,11 +167,14 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
             "access_token=${accessToken}", String::class.java
         ) { res, errMsg ->
             res?.let{
-                saveByteArrayToFile(fileSavePath,it.toByteArray(), downloadCallback)
+                saveByteArrayToFile(fileSavePath, it.toByteArray())
             }
         }
     }
-    @OptIn(ExperimentalStdlibApi::class)
+
+    /**
+     * 下载文件
+     */
     fun downloadBlobs(sha:String, fileSavePath: String, downloadCallback: (DownloadStatus)->Unit){
         server.get(
             "api/v5/repos/${repoOwner}/${repoName}/git/blobs/$sha",
@@ -172,7 +218,11 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
             }
         }
     }
-    private fun saveByteArrayToFile(fileSavePath: String, content: ByteArray, saveCallback: (DownloadStatus)->Unit){
+
+    /**
+     * 将字节数组保存到文件
+     */
+    private fun saveByteArrayToFile(fileSavePath: String, content: ByteArray){
         if(content.isEmpty()) return
         Log.d(TAG, "saveByteArrayToFile: save ${content.size} bytes to file")
         val file = File(fileSavePath)
@@ -189,6 +239,10 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
             Log.e(TAG, "downloadAPK: $e")
         }
     }
+
+    /**
+     * 将字节数组追加到文件
+     */
     private fun appendByteArrayToFile(fileSavePath: String, content: ByteArray, saveCallback: (DownloadStatus)->Unit){
         if(content.isEmpty()) return
         val file = File(fileSavePath)
@@ -203,6 +257,10 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
             Log.e(TAG, "downloadAPK: $e")
         }
     }
+
+    /**
+     * 从url下载文件
+     */
     fun downloadFileByUrl(url: String, fileSavePath: String, downloadCallback: (DownloadStatus)->Unit){
         if(!url.startsWith("http") && !url.startsWith("https")){
             downloadCallback(DownloadStatus(errMsg = "error Url"))
@@ -228,7 +286,35 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
         outputStream.close()
         downloadCallback(DownloadStatus(savePath = apkFile.absolutePath, progress = 100))
     }
-    // 打开apk文件进行更新
+
+    /**
+     * 打开apk文件进行安装，请注意已经注册相关权限
+     * 注1: 在AndroidManifest.xml中，需要添加以下权限 <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+     * 注2: 文件授权 "${context.packageName}.fileprovider"
+     *
+     * @sample
+     * 1.
+     * ```xml/file_path_provider.xml
+     * <?xml version="1.0" encoding="utf-8"?>
+     * <paths>
+     *     <external-path
+     *         name="apk_download_path"
+     *         path="Download" />
+     * </paths>
+     * ```
+     * 2.
+     * ```在AndroidManifest.xml node application
+     *<provider
+     *    android:name="androidx.core.content.FileProvider"
+     *    android:authorities="${applicationId}.fileprovider"
+     *    android:grantUriPermissions="true"
+     *    android:exported="false" >
+     *    <meta-data
+     *        android:name="android.support.FILE_PROVIDER_PATHS"
+     *        android:resource="@xml/file_path_provider" />
+     *</provider>
+     * ```
+     */
     fun openAPK(context: Context, apkPath:String){
         if(apkPath.isBlank()) return
         val intent = Intent(Intent.ACTION_VIEW)
@@ -244,6 +330,13 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
         context.startActivity(intent)
     }
 
+    /**
+     * 上传文件到指定git路径
+     * @param filePath 本地文件路径
+     * @param newFilePath git文件路径
+     * @param commitMsg git提交信息
+     * @param uploadCallback 回调
+     */
     fun uploadFile(filePath: String, newFilePath: String, commitMsg: String, uploadCallback: (String?)->Unit){
         val encodedPath = URLEncoder.encode(newFilePath, "utf-8")
         //base 64编码文件内容
@@ -261,9 +354,11 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
             "api/v5/repos/${repoOwner}/${repoName}/contents/$encodedPath",
             "{\"access_token\":\"${accessToken}\",\"content\": \"$content\", \"message\": \"$commitMsg\"}", String::class.java
         ) { res, errMsg ->
-            res?.let{
-                Log.d(TAG, "uploadFile: response is $res eerro: $errMsg")
+            Log.d(TAG, "uploadFile: response is $res err: $errMsg")
+            errMsg?.let{
                 uploadCallback(errMsg)
+            }?:run{
+                uploadCallback(res)
             }
         }
     }
@@ -308,6 +403,10 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
     )
     data class ContentsInfoLinks(val self: String, val html: String)
 
+    /**
+     * App版本信息
+     * @sample jsonFileSample
+     */
     data class AppVersionsInfo(
         val appId: String,
         val appName: String,
@@ -345,4 +444,105 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
         val total: Int=0,
         val current: Int=0,
     )
+    /**
+     * 版本控制的json文件示例，所有版本信息从此文件读取
+     * ```
+     * {
+     *  "appId": "com.jeady.test",
+     *  "latestVersion": "1.0.1",
+     *  "appName": "廸哥的版本测试程序",
+     *  "description": "这只是一个测试程序，仅供测试者测试使用，没有实际用处",
+     *  "testVersion": "1.0.1",
+     *  "mark": "release",
+     *  "versions": [
+     *      {
+     *          "appName": "版本测试程序",
+     *          "version": "1.0.1",
+     *          "versionCode": 1,
+     *          "description": "新增了版本测试内容",
+     *          "mark": "release",
+     *          "iconUrl": "",
+     *          "detailUrl": "",
+     *          "downloadUrl": "timetodo/v1.0.1.apk",
+     *          "pictureUrls": "",
+     *          "publishTime": "2024/08/09 14:32:55",
+     *          "publisher": {
+     *              "name": "jeady",
+     *              "avatorUrl": "",
+     *              "timestamp": "",
+     *              "contact": "",
+     *              "mark": ""
+     *          }
+     *      },
+     *      {
+     *          "appLabel": "版本测试程序",
+     *          "version": "1.0.0",
+     *          "versionCode": 0,
+     *          "description": "test版本",
+     *          "mark": "",
+     *          "iconUrl": "",
+     *          "detailUrl": "",
+     *          "downloadUrl": "test/v1.0.0.apk",
+     *          "pictureUrls": "",
+     *          "publisher": {
+     *              "name": "jeady",
+     *              "avatorUrl": "",
+     *              "timestamp": "",
+     *              "contact": "",
+     *              "mark": ""
+     *          }
+     *      }
+     *  ]
+     * }
+     * ```
+    */
+    private val jsonFileSample = """
+{
+ "appId": "com.jeady.test",
+ "latestVersion": "1.0.1",
+ "appName": "廸哥的版本测试程序",
+ "description": "这只是一个测试程序，仅供测试者测试使用，没有实际用处",
+ "testVersion": "1.0.1",
+ "mark": "release",
+ "versions": [
+     {
+         "appName": "版本测试程序",
+         "version": "1.0.1",
+         "versionCode": 1,
+         "description": "新增了版本测试内容",
+         "mark": "release",
+         "iconUrl": "",
+         "detailUrl": "",
+         "downloadUrl": "timetodo/v1.0.1.apk",
+         "pictureUrls": "",
+         "publishTime": "2024/08/09 14:32:55",
+         "publisher": {
+             "name": "jeady",
+             "avatorUrl": "",
+             "timestamp": "",
+             "contact": "",
+             "mark": ""
+         }
+     },
+     {
+         "appLabel": "版本测试程序",
+         "version": "1.0.0",
+         "versionCode": 0,
+         "description": "test版本",
+         "mark": "",
+         "iconUrl": "",
+         "detailUrl": "",
+         "downloadUrl": "test/v1.0.0.apk",
+         "pictureUrls": "",
+         "publisher": {
+             "name": "jeady",
+             "avatorUrl": "",
+             "timestamp": "",
+             "contact": "",
+             "mark": ""
+         }
+     }
+ ]
+}
+"""
 }
