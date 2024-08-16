@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.jetbrains.kotlin.android)
 }
 
+version = "1.1"
 android {
     namespace = "io.github.jeadyx.gitversionmanager"
     compileSdk = 34
@@ -59,8 +60,8 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
-//    implementation(project(":gitVersionManager"))
-    implementation(libs.gitversionmanager)
+    implementation(project(":gitVersionManager"))
+//    implementation(libs.gitversionmanager)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

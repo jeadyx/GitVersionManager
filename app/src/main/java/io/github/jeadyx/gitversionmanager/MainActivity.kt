@@ -129,6 +129,13 @@ fun GitManagerExample(modifier: Modifier = Modifier){
                 }
             }
         }
+        ButtonText("获取应用列表信息") {
+            thread {
+                gitManager.getCategory("category.json") { res ->
+                    showDialog1("$res")
+                }
+            }
+        }
         Row {
 //            var path by remember { mutableStateOf("timetodo/version.json") }
 //            var path by remember { mutableStateOf("test/mm.jpg") }

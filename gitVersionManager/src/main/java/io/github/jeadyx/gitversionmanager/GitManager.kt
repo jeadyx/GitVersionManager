@@ -2,6 +2,7 @@ package io.github.jeadyx.gitversionmanager
 
 import android.content.Context
 import android.content.Intent
+import android.health.connect.datatypes.AppInfo
 import android.util.Base64
 import android.util.Log
 import androidx.core.content.FileProvider
@@ -19,9 +20,9 @@ private val TAG = "[GitManager]"
 /**
  * 无需自建服务器，使用git管理你的应用版本; 默认为gitee仓库;
  * * 如需自定义服务器地址，请使用 [setHost]
- * * 关于版本文件的编写参考 [jsonFileSample]
+ * * 关于版本文件的编写参考 [versionFileSample]
  * @see setHost 设置自定义服务器地址
- * @see jsonFileSample 版本文件示例
+ * @see versionFileSample 版本文件示例
  */
 class GitManager(private val repoOwner: String, private val repoName: String, private val accessToken: String) {
 //    private val server = ServerManager.getInstance("https://api.gitcode.com", 30L)
@@ -106,10 +107,10 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
     /**
      * 从服务器获取全部版本信息
      * @param filePath git版本文件的路径
-     * @param appVersions 回调函数
+     * @param appVersions 回调函数; return null if file not exist
      * @see AppVersionsInfo
      */
-    fun getVersions(filePath: String, appVersions: (AppVersionsInfo)->Unit){
+    fun getVersions(filePath: String, appVersions: (AppVersionsInfo?)->Unit){
         server.get("api/v5/repos/${repoOwner}/${repoName}/contents/" + URLEncoder.encode(filePath, "utf-8"),
             "access_token=${accessToken}", ResponseInfo::class.java
         ) { data, errMsg->
@@ -119,7 +120,27 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
 //                    Log.d(TAG, "getServerVersionInfo: get versions $appInfo")
                     appVersions(appInfo)
                 }
-            }
+            }?:run { appVersions(null) }
+        }
+    }
+
+    /**
+     * 从服务器获取全部app信息
+     * @param filePath git 上的app目录文件路径
+     * @param appCategoryCallback 回调函数; return null if file not exist
+     * @see AppCategory
+     */
+    fun getCategory(filePath: String, appCategoryCallback: (AppCategory?)->Unit){
+        server.get("api/v5/repos/${repoOwner}/${repoName}/contents/" + URLEncoder.encode(filePath, "utf-8"),
+            "access_token=${accessToken}", ResponseInfo::class.java
+        ) { data, errMsg->
+            data?.content?.let{
+                val content = String(Base64.decode(it, Base64.DEFAULT))
+                Gson().fromJson(content, AppCategory::class.java)?.let { appCategory->
+//                    Log.d(TAG, "getServerVersionInfo: get versions $appInfo")
+                    appCategoryCallback(appCategory)
+                }
+            }?:run{ appCategoryCallback(null) }
         }
     }
 
@@ -404,8 +425,38 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
     data class ContentsInfoLinks(val self: String, val html: String)
 
     /**
+     * App目录
+     * @sample categoryFileSample
+     */
+    data class AppCategory(
+        /**
+         * 目录版本
+         */
+        val version: String,
+        /**
+         * 目录标题
+         */
+        val title: String,
+        /**
+         * app目录列表
+         */
+        val apps: List<AppInfo>
+    )
+
+    data class AppInfo(
+        /**
+         * app 标记
+         */
+        val name: String,
+        /**
+         * app version file路径
+         */
+        val versionFile: String
+    )
+
+    /**
      * App版本信息
-     * @sample jsonFileSample
+     * @sample versionFileSample
      */
     data class AppVersionsInfo(
         val appId: String,
@@ -496,7 +547,7 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
      * }
      * ```
     */
-    private val jsonFileSample = """
+    private val versionFileSample = """
 {
  "appId": "com.jeady.test",
  "latestVersion": "1.0.1",
@@ -541,6 +592,18 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
              "contact": "",
              "mark": ""
          }
+     }
+ ]
+}
+"""
+    private val categoryFileSample = """
+{
+ "version": "1.0",
+ "title": "版本测试",
+ "apps": [
+     {
+         "name": "版本测试",
+         "versionFile": "test/versions.json"
      }
  ]
 }
