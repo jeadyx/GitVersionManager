@@ -7,6 +7,7 @@ import android.util.Base64
 import android.util.Log
 import androidx.core.content.FileProvider
 import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import io.github.jeadyx.simplenetmanager.SimpleNetManager
 import java.io.File
 import java.io.FileOutputStream
@@ -240,6 +241,41 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
         }
     }
 
+    fun getFileInfo(filePath: String, callback: (List<ResponseInfo>?)->Unit){
+        server.get("api/v5/repos/${repoOwner}/${repoName}/contents/" + URLEncoder.encode(filePath, "utf-8"),
+            "access_token=${accessToken}", String::class.java
+        ) { data, errMsg->
+            data?.let{
+                val res = if(data.startsWith("[")){
+                    Gson().fromJson(it, Array<ResponseInfo>::class.java).toList()
+                }else{
+                    listOf(Gson().fromJson(it, ResponseInfo::class.java))
+                }
+                callback(res)
+            }?:run {
+                Log.e(TAG, "getFileInfo: ERROR $errMsg")
+                callback(null)
+            }
+        }
+    }
+
+    /**
+     * 获取目录tree
+     */
+    fun getTree(sha:String, recursive: Boolean=false, callback: (List<TreeInfo>?)->Unit) {
+        server.get(
+            "api/v5/repos/${repoOwner}/${repoName}/git/trees/$sha",
+            "access_token=${accessToken}&recursive=${if(recursive) 1 else 0}", ResponseInfo::class.java
+        ) { data, errMsg ->
+            Log.d(TAG, "getTree: $data $errMsg")
+            data?.let {
+                callback(data.tree)
+            }?:run{
+                callback(null)
+            }
+        }
+    }
+
     /**
      * 将字节数组保存到文件
      */
@@ -408,7 +444,7 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
         val status: Int,
         val type: String,
         val encoding: String,
-        val size: String,
+        val size: Int,
         val name: String,
         val path: String,
         val content: String,
@@ -420,9 +456,19 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
         val error_msg: String,
         val error_code: String,
         val request_id: String,
-        val message: String
+        val message: String,
+        val tree: List<TreeInfo>,
+        val truncated: Boolean
     )
     data class ContentsInfoLinks(val self: String, val html: String)
+    data class TreeInfo(
+        val path: String,
+        val mode: String,
+        val type: String,
+        val sha: String,
+        val size: Int,
+        val url: String
+    )
 
     /**
      * App目录

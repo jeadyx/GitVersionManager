@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -29,7 +31,9 @@ import androidx.compose.ui.unit.dp
 import io.github.jeadyx.gitversionmanager.ui.theme.GitVersionManagerTheme
 import java.io.File
 import java.math.BigDecimal
+import java.math.BigInteger
 import java.math.RoundingMode
+import java.security.MessageDigest
 import java.text.DecimalFormat
 import kotlin.concurrent.thread
 
@@ -83,7 +87,8 @@ fun GitManagerExample(modifier: Modifier = Modifier){
                 gitManager.openAPK(context, state)
         })
     }
-    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(20.dp)) {
+    val scrollState = rememberScrollState()
+    Column(modifier.verticalScroll(scrollState), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(20.dp)) {
         var ownerName by remember { mutableStateOf("") }
         var repoName by remember { mutableStateOf("") }
         var accessToken by remember { mutableStateOf("") }
@@ -93,7 +98,7 @@ fun GitManagerExample(modifier: Modifier = Modifier){
         ButtonText("初始化") {
             gitManager = GitManager(ownerName, repoName, accessToken)
         }
-        ButtonText("检查新版本") {
+        ButtonText("检查新版本{test/versions.json}") {
             gitManager.getLatestServerVersion("test/versions.json") {
                 it?.let { v ->
                     val currentVersion = context.packageManager.getPackageInfo(context.packageName,0).versionName
@@ -122,17 +127,40 @@ fun GitManagerExample(modifier: Modifier = Modifier){
                 } ?: showToast(context, "检查失败，可能信息有误")
             }
         }
-        ButtonText("获取版本信息") {
+        ButtonText("获取版本信息{test/versions.json}") {
             thread {
                 gitManager.getVersions("test/versions.json") { res ->
                     showDialog1("$res")
                 }
             }
         }
-        ButtonText("获取应用列表信息") {
+        ButtonText("获取应用列表信息{category.json}") {
             thread {
                 gitManager.getCategory("category.json") { res ->
                     showDialog1("$res")
+                }
+            }
+        }
+        Row {
+            var filePath by remember{ mutableStateOf("") }
+            TextField(value = filePath, onValueChange = { filePath = it }, placeholder = { Text("filePath") })
+            ButtonText("获取目录Tree") {
+                thread {
+                    gitManager.getFileInfo(filePath) { res ->
+                        res?.let {
+                            val files = res.map {
+                                GitManager.TreeInfo(
+                                    it.path,
+                                    "",
+                                    it.type,
+                                    it.sha,
+                                    it.size,
+                                    it.url
+                                )
+                            }
+                            showDialog1(files.toString())
+                        }
+                    }
                 }
             }
         }
@@ -172,4 +200,10 @@ fun GitManagerExample(modifier: Modifier = Modifier){
 
 fun showToast(context: Context, title: String){
     Toast.makeText(context, title, Toast.LENGTH_SHORT).show()
+}
+
+fun String.toSHA256(): String {
+    val md = MessageDigest.getInstance("SHA-128")
+    val digest = md.digest(this.toByteArray())
+    return BigInteger(1, digest).toString(16).padStart(64, '0')
 }

@@ -35,7 +35,7 @@ android {
 }
 
 group = "io.github.jeadyx.compose"
-version = "1.5"
+version = "1.6"
 val tokenUsername:String by project
 val tokenPassword:String by project
 sonatypeUploader{
