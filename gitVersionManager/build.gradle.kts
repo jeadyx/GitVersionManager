@@ -35,7 +35,7 @@ android {
 }
 
 group = "io.github.jeadyx.compose"
-version = "1.6"
+version = "1.7"
 val tokenUsername:String by project
 val tokenPassword:String by project
 sonatypeUploader{
@@ -68,7 +68,7 @@ sonatypeUploader{
             val dependencyNetManager = dependenciesNode.appendNode("dependency")
             dependencyNetManager.appendNode("groupId", "io.github.jeadyx.compose")
             dependencyNetManager.appendNode("artifactId", "SimpleNetManager")
-            dependencyNetManager.appendNode("version", "1.2")
+            dependencyNetManager.appendNode("version", "1.4")
         }
     }
 }

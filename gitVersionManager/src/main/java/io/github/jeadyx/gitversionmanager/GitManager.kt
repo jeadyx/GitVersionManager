@@ -2,12 +2,10 @@ package io.github.jeadyx.gitversionmanager
 
 import android.content.Context
 import android.content.Intent
-import android.health.connect.datatypes.AppInfo
 import android.util.Base64
 import android.util.Log
 import androidx.core.content.FileProvider
 import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import io.github.jeadyx.simplenetmanager.SimpleNetManager
 import java.io.File
 import java.io.FileOutputStream
@@ -163,8 +161,8 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
 //                Log.i(TAG, "downloadFile: get contents res: ${data?.message} ${data?.content?.length} / ${data?.size} ${data?.sha}; \nerr:$errMsg")
 //                Log.d(TAG, "downloadFile: ${data?.content?.length} ${data?.content}")
                 data?.let { contentInfo ->
-                    if (contentInfo.content.isNotBlank() && contentInfo.content.length == contentInfo.size.toInt()){
-                        downloadCallback(DownloadStatus(total = contentInfo.size.toInt(), current = 0, progress = 0))
+                    if (contentInfo.content.isNotBlank() && contentInfo.content.length == contentInfo.size){
+                        downloadCallback(DownloadStatus(total = contentInfo.size, current = 0, progress = 0))
                         saveByteArrayToFile(
                             fileSavePath,
                             Base64.decode(contentInfo.content, Base64.DEFAULT)
@@ -210,11 +208,10 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
             if(file.exists()) file.delete()
             data?.let { blobsInfo->
                 blobsInfo.content?.let {content->
-                    Log.d(TAG, "downloadFile2: ${content.length} ${content}")
+//                    Log.d(TAG, "downloadBlobs: ${content.length} ${content}")
                     var currentIdx = 1
                     val readOneLen = 1024 * 500
                     var readLen = 0
-                    val bufferrr = Base64.decode(content, Base64.DEFAULT)
                     while (content.length > readLen){
                         var buffer = byteArrayOf()
                         if(content.length>readLen+readOneLen){
@@ -241,6 +238,11 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
         }
     }
 
+    /**
+     * 获取文件信息；如果为目录则会列出文件夹下的文件，不包含大小，如需大小等信息请调用[getTree]
+     * @param filePath git文件路径
+     * @param callback 回调,文件列表
+     */
     fun getFileInfo(filePath: String, callback: (List<ResponseInfo>?)->Unit){
         server.get("api/v5/repos/${repoOwner}/${repoName}/contents/" + URLEncoder.encode(filePath, "utf-8"),
             "access_token=${accessToken}", String::class.java
@@ -260,14 +262,17 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
     }
 
     /**
-     * 获取目录tree
+     * 根据文件sha获取目录tree
+     * @param sha 文件sha
+     * @param recursive 是否递归获取子目录
+     * @param callback 回调,文件列表
      */
     fun getTree(sha:String, recursive: Boolean=false, callback: (List<TreeInfo>?)->Unit) {
         server.get(
             "api/v5/repos/${repoOwner}/${repoName}/git/trees/$sha",
             "access_token=${accessToken}&recursive=${if(recursive) 1 else 0}", ResponseInfo::class.java
         ) { data, errMsg ->
-            Log.d(TAG, "getTree: $data $errMsg")
+//            Log.d(TAG, "getTree: $data $errMsg")
             data?.let {
                 callback(data.tree)
             }?:run{
@@ -277,11 +282,11 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
     }
 
     /**
-     * 将字节数组保存到文件
+     * 将字节数组保存到本地文件
      */
-    private fun saveByteArrayToFile(fileSavePath: String, content: ByteArray){
+    fun saveByteArrayToFile(fileSavePath: String, content: ByteArray){
         if(content.isEmpty()) return
-        Log.d(TAG, "saveByteArrayToFile: save ${content.size} bytes to file")
+//        Log.d(TAG, "saveByteArrayToFile: save ${content.size} bytes to file")
         val file = File(fileSavePath)
         if (file.exists()){
             file.delete()
@@ -298,9 +303,9 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
     }
 
     /**
-     * 将字节数组追加到文件
+     * 将字节数组追加到本地文件
      */
-    private fun appendByteArrayToFile(fileSavePath: String, content: ByteArray, saveCallback: (DownloadStatus)->Unit){
+    fun appendByteArrayToFile(fileSavePath: String, content: ByteArray, saveCallback: (DownloadStatus)->Unit){
         if(content.isEmpty()) return
         val file = File(fileSavePath)
         if (!file.exists() && file.parent?.let { File(it).exists() } == false){
@@ -332,13 +337,13 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
         val outputStream = FileOutputStream(apkFile)
         val buffer = ByteArray(1024)
         var len = inputStream.read(buffer)
-        Log.d(TAG, "downloadAPK: 开始下载")
+        Log.d(TAG, "downloadFileByUrl: 开始下载")
         while (len != -1){
             outputStream.write(buffer, 0, len)
             len = inputStream.read(buffer)
-            Log.d(TAG, "downloadAPK: 下载中 $len / ${apkFile.length()}")
+            Log.d(TAG, "downloadFileByUrl: 下载中 $len / ${apkFile.length()}")
         }
-        Log.d(TAG, "downloadAPK: 下载完成")
+        Log.d(TAG, "downloadFileByUrl: 下载完成")
         inputStream.close()
         outputStream.close()
         downloadCallback(DownloadStatus(savePath = apkFile.absolutePath, progress = 100))
@@ -375,7 +380,7 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
     fun openAPK(context: Context, apkPath:String){
         if(apkPath.isBlank()) return
         val intent = Intent(Intent.ACTION_VIEW)
-        Log.d(TAG, "openAPK: get packageNmae ${context.packageName}")
+//        Log.d(TAG, "openAPK: get packageNmae ${context.packageName}")
         val uri = FileProvider.getUriForFile(
             context,
             "${context.packageName}.fileprovider",
@@ -411,7 +416,90 @@ class GitManager(private val repoOwner: String, private val repoName: String, pr
             "api/v5/repos/${repoOwner}/${repoName}/contents/$encodedPath",
             "{\"access_token\":\"${accessToken}\",\"content\": \"$content\", \"message\": \"$commitMsg\"}", String::class.java
         ) { res, errMsg ->
-            Log.d(TAG, "uploadFile: response is $res err: $errMsg")
+//            Log.d(TAG, "uploadFile: response is $res err: $errMsg")
+            errMsg?.let{
+                uploadCallback(errMsg)
+            }?:run{
+                uploadCallback(res)
+            }
+        }
+    }
+
+    /**
+     * 上传字节数组到指定git路径
+     * @param bytes 文件字节数组
+     * @param newFilePath git文件路径
+     * @param commitMsg git提交信息
+     * @param uploadCallback 回调
+     */
+    fun uploadFile(bytes: ByteArray, newFilePath: String, commitMsg: String, uploadCallback: (String?)->Unit){
+        val encodedPath = URLEncoder.encode(newFilePath, "utf-8")
+        val content = Base64.encodeToString(bytes, Base64.DEFAULT)
+        server.post(
+            "api/v5/repos/${repoOwner}/${repoName}/contents/$encodedPath",
+            "{\"access_token\":\"${accessToken}\",\"content\": \"$content\", \"message\": \"$commitMsg\"}", String::class.java
+        ) { res, errMsg ->
+//            Log.d(TAG, "uploadFile: response is $res err: $errMsg")
+            errMsg?.let{
+                uploadCallback(errMsg)
+            }?:run{
+                uploadCallback(res)
+            }
+        }
+    }
+    /**
+     * 刪除指定路徑的文件
+     * @param filePath git文件路径
+     * @param sha git文件sha
+     * @param commitMsg git提交信息
+     * @param uploadCallback 回调
+     */
+    fun deleteFile(filePath: String, sha: String, commitMsg: String, uploadCallback: (String?)->Unit){
+        val encodedPath = URLEncoder.encode(filePath, "utf-8")
+        server.delete(
+            "api/v5/repos/${repoOwner}/${repoName}/contents/$encodedPath",
+            "{\"access_token\":\"${accessToken}\", \"sha\": \"$sha\", \"message\": \"$commitMsg\"}", String::class.java
+        ) { res, errMsg ->
+//            Log.d(TAG, "deleteFile: response is $res err: $errMsg")
+            errMsg?.let{
+                uploadCallback(errMsg)
+            }?:run{
+                uploadCallback(res)
+            }
+        }
+    }
+    /**
+     * 更新指定路徑的文件
+     * @param filePath 文件字节数组
+     * @param gitFilePath git文件路径
+     * @param sha git文件sha
+     * @param commitMsg git提交信息
+     * @param uploadCallback 回调
+     */
+    fun updateFile(filePath: String, gitFilePath: String, sha: String, commitMsg: String, uploadCallback: (String?)->Unit) {
+        val file = File(filePath)
+        if (!file.exists()) {
+            uploadCallback("文件不存在")
+            return
+        }
+        updateFile(file.readBytes(), gitFilePath, sha, commitMsg, uploadCallback)
+    }
+    /**
+     * 更新指定路徑的文件
+     * @param bytes 文件字节数组
+     * @param filePath git文件路径
+     * @param sha git文件sha
+     * @param commitMsg git提交信息
+     * @param uploadCallback 回调
+     */
+    fun updateFile(bytes: ByteArray, filePath: String, sha: String, commitMsg: String, uploadCallback: (String?)->Unit){
+        val encodedPath = URLEncoder.encode(filePath, "utf-8")
+        val content = Base64.encodeToString(bytes, Base64.DEFAULT)
+        server.put(
+            "api/v5/repos/${repoOwner}/${repoName}/contents/$encodedPath",
+            "{\"access_token\":\"${accessToken}\", \"sha\": \"$sha\", \"content\": \"$content\", \"message\": \"$commitMsg\"}", String::class.java
+        ) { res, errMsg ->
+//            Log.d(TAG, "updateFile: response is $res err: $errMsg")
             errMsg?.let{
                 uploadCallback(errMsg)
             }?:run{
