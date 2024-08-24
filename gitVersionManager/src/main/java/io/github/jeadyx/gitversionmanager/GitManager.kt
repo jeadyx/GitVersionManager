@@ -25,14 +25,25 @@ private val TAG = "[GitManager]"
  */
 class GitManager(private val repoOwner: String, private val repoName: String, private val accessToken: String) {
 //    private val server = ServerManager.getInstance("https://api.gitcode.com", 30L)
-    private var server = SimpleNetManager.getInstance("https://gitee.com", 120L)
-
+    private var timeout = 120L
+    private var host = "https://gitee.com"
+    private var server = SimpleNetManager.getInstance(host, timeout)
     /**
-     * 设置服务器地址. 如https://gitee.com
+     * 设置服务器地址. 默认https://gitee.com
      */
     fun setHost(url: String): Boolean{
         if(!url.startsWith("http") && !url.startsWith("https")) return false
-        server =  SimpleNetManager.getInstance(url)
+        host = url
+        server =  SimpleNetManager.getInstance(host, timeout)
+        return true
+    }
+    /**
+     * 设置超时时间. 默认120
+     */
+    fun setTimeout(timeout: Long): Boolean{
+        if(timeout<0) return false
+        this.timeout = timeout
+        server =  SimpleNetManager.getInstance(host, timeout)
         return true
     }
 
